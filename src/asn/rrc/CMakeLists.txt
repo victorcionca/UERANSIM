@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.17)
+#cmake_minimum_required(VERSION 3.17)
 
 file(GLOB HDR_FILES *.h)
 file(GLOB SRC_FILES *.c)

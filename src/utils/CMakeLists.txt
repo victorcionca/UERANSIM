@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.17)
+#cmake_minimum_required(VERSION 3.17)
 
 file(GLOB_RECURSE YAML_HDR_FILES *.h)
 file(GLOB_RECURSE YAML_SRC_FILES *.cpp)
