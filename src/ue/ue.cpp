@@ -17,7 +17,8 @@ namespace nr::ue
 {
 
 UserEquipment::UserEquipment(UeConfig *config, app::IUeController *ueController, app::INodeListener *nodeListener,
-                             NtsTask *cliCallbackTask)
+                             NtsTask *cliCallbackTask,
+                             std::ofstream *exp_file)
 {
     auto *base = new TaskBase();
     base->ue = this;
@@ -32,6 +33,7 @@ UserEquipment::UserEquipment(UeConfig *config, app::IUeController *ueController,
     base->mrTask = new UeMrTask(base);
     base->appTask = new UeAppTask(base);
 
+    base->exp_results = exp_file;
     taskBase = base;
 }
 

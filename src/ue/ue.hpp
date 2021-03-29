@@ -13,6 +13,7 @@
 #include <memory>
 #include <utils/network.hpp>
 #include <utils/nts.hpp>
+#include <fstream>
 
 namespace nr::ue
 {
@@ -24,7 +25,7 @@ class UserEquipment
 
   public:
     UserEquipment(UeConfig *config, app::IUeController *ueController, app::INodeListener *nodeListener,
-                  NtsTask *cliCallbackTask);
+                  NtsTask *cliCallbackTask, std::ofstream *exp_file);
     virtual ~UserEquipment();
 
   public:

@@ -12,6 +12,7 @@
 #include <nas/utils.hpp>
 #include <ue/nas/task.hpp>
 #include <utils/common.hpp>
+#include <chrono>
 
 namespace nr::ue
 {
@@ -91,6 +92,12 @@ void NasMm::sendInitialRegistration(bool isEmergencyReg, bool dueToDereg)
         request->nasKeySetIdentifier.ksi = m_usim->m_currentNsCtx->ngKsi;
     }
 
+    m_logger->info("Commencing registration");
+    auto reg_start_ts = std::chrono::system_clock::now();
+    m_base->reg_start = std::chrono::duration_cast<std::chrono::microseconds>(
+            reg_start_ts.time_since_epoch());
+    m_logger->info("Commencing registration at %ld", m_base->reg_start.count());
+
     // Send the message
     sendNasMessage(*request);
     m_lastRegistrationRequest = std::move(request);
@@ -99,7 +106,8 @@ void NasMm::sendInitialRegistration(bool isEmergencyReg, bool dueToDereg)
     m_timers->t3510.start();
     m_timers->t3502.stop();
     m_timers->t3511.stop();
-}
+
+    }
 
 void NasMm::sendMobilityRegistration(ERegUpdateCause updateCause)
 {
@@ -201,7 +209,18 @@ void NasMm::receiveRegistrationAccept(const nas::RegistrationAccept &msg)
         return;
     }
 
+    auto reg_end_ts = std::chrono::system_clock::now();
+    m_base->reg_end = std::chrono::duration_cast<std::chrono::microseconds>(
+            reg_end_ts.time_since_epoch());
+    m_logger->info("Completed registration at %ld", m_base->reg_end.count());
+    auto reg_time = m_base->reg_end - m_base->reg_start;
+    if (m_base->exp_results){
+        (*m_base->exp_results) <<m_base->reg_start.count() << " " << reg_time.count() << '\n';
+        m_base->exp_results->flush();
+    }
+    m_logger->info("Registration time: %ld us", reg_time.count());
     auto regType = m_lastRegistrationRequest->registrationType.registrationType;
+
     if (regType == nas::ERegistrationType::INITIAL_REGISTRATION ||
         regType == nas::ERegistrationType::EMERGENCY_REGISTRATION)
         receiveInitialRegistrationAccept(msg);

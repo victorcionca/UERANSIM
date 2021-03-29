@@ -21,6 +21,9 @@
 #include <utils/options.hpp>
 #include <utils/yaml_utils.hpp>
 #include <yaml-cpp/yaml.h>
+#include <thread>
+#include <chrono>
+#include <math.h>
 
 static app::CliServer *g_cliServer = nullptr;
 static nr::ue::UeConfig *g_refConfig = nullptr;
@@ -34,6 +37,7 @@ static struct Options
     bool disableCmd{};
     std::string imsi{};
     int count{};
+    int rate{};
 } g_options{};
 
 struct NwUeControllerCmd : NtsMessage
@@ -228,6 +232,7 @@ static void ReadOptions(int argc, char **argv)
     opt::OptionItem itemImsi = {'i', "imsi", "Use specified IMSI number instead of provided one", "imsi"};
     opt::OptionItem itemCount = {'n', "num-of-UE", "Generate specified number of UEs starting from the given IMSI",
                                  "num"};
+    opt::OptionItem itemRate = {'f', "ue-req-rate", "Rate of UE requests per second", "rate"};
     opt::OptionItem itemDisableCmd = {'l', "disable-cmd", "Disable command line functionality for this instance",
                                       std::nullopt};
     opt::OptionItem itemDisableRouting = {'r', "no-routing-config",
@@ -236,6 +241,7 @@ static void ReadOptions(int argc, char **argv)
     desc.items.push_back(itemConfigFile);
     desc.items.push_back(itemImsi);
     desc.items.push_back(itemCount);
+    desc.items.push_back(itemRate);
     desc.items.push_back(itemDisableCmd);
     desc.items.push_back(itemDisableRouting);
 
@@ -255,6 +261,18 @@ static void ReadOptions(int argc, char **argv)
     {
         g_options.count = 1;
     }
+
+    if (opt.hasFlag(itemRate))
+    {
+        g_options.rate = utils::ParseInt(opt.getOption(itemRate));
+        if (g_options.rate < 1)
+            throw std::runtime_error("Rate must be at least 1 per second");
+        if (g_options.rate > 200)
+            throw std::runtime_error("Max 200 UE requests per second");
+    }else{
+        g_options.rate = 1;
+    }
+
 
     g_options.imsi = {};
     if (opt.hasFlag(itemImsi))
@@ -441,11 +459,47 @@ int main(int argc, char **argv)
         std::cerr << "ERROR: " << e.what() << std::endl;
         return 1;
     }
-
+    
     std::cout << cons::Name << std::endl;
 
     g_controllerTask = new UeControllerTask();
     g_controllerTask->start();
+
+    /***************************************************************************/
+    // Dimensioning experiment
+    std::ofstream *exp_results = new std::ofstream("/root/ueransim_exp/exp_results_"+std::to_string(g_options.rate));
+    for (int i = 0; i < g_options.count; i++)
+    {
+        float u;
+        int this_lambda;
+        auto *config = GetConfigByUe(i);
+        auto *ue = new nr::ue::UserEquipment(config, &g_ueController, nullptr, g_cliRespTask,
+                exp_results);
+        g_ueMap.put(config->getNodeName(), ue);
+        ue->start();
+
+        // Random exponentially distributed lambda
+        u = ((float)rand())/RAND_MAX-1;
+        if (u == -1){
+            this_lambda = 1000;
+        }else{
+            this_lambda = -(1000*(float)(log1pf(u)/(1/(float)g_options.rate)));
+        }
+
+        std::this_thread::sleep_for(std::chrono::milliseconds(this_lambda));
+    }
+
+    // Wait for all UEs to finish
+    std::this_thread::sleep_for(std::chrono::milliseconds(20000));
+    // Delete the UEs
+    g_ueMap.invokeForeach([](const auto &ue) {
+            delete ue.second;
+            g_ueMap.remove(ue.first);
+            });
+
+    exp_results->flush();
+
+    return 0;
 
     if (!g_options.disableCmd)
     {
@@ -456,7 +510,7 @@ int main(int argc, char **argv)
     for (int i = 0; i < g_options.count; i++)
     {
         auto *config = GetConfigByUe(i);
-        auto *ue = new nr::ue::UserEquipment(config, &g_ueController, nullptr, g_cliRespTask);
+        auto *ue = new nr::ue::UserEquipment(config, &g_ueController, nullptr, g_cliRespTask, exp_results);
         g_ueMap.put(config->getNodeName(), ue);
     }
 

@@ -19,6 +19,8 @@
 #include <utils/logger.hpp>
 #include <utils/nts.hpp>
 #include <utils/octet_string.hpp>
+#include <chrono>
+#include <fstream>
 
 namespace nr::ue
 {
@@ -125,6 +127,12 @@ struct TaskBase
     UeMrTask *mrTask{};
     NasTask *nasTask{};
     UeRrcTask *rrcTask{};
+
+    // Time keeping for this UE
+    std::chrono::microseconds reg_start;
+    std::chrono::microseconds reg_end;
+    // Logging of results
+    std::ofstream *exp_results;
 };
 
 struct UeTimers
