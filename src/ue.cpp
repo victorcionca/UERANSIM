@@ -483,7 +483,7 @@ int main(int argc, char **argv)
         if (u == -1){
             this_lambda = 1000;
         }else{
-            this_lambda = -(1000*(float)(log1pf(u)/(1/(float)g_options.rate)));
+            this_lambda = -(1000*(float)(log1pf(u)/((float)g_options.rate)));
         }
 
         std::this_thread::sleep_for(std::chrono::milliseconds(this_lambda));
