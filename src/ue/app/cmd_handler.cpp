@@ -173,6 +173,21 @@ void UeCmdHandler::handleCmdImpl(NmUeCliCommand &msg)
             sendResult(msg.address, "De-registration procedure triggered. UE device will be switched off.");
         break;
     }
+    case app::UeCliCommand::RRC_RELEASE: {
+        m_base->nasTask->mm->localReleaseConnection(false);
+        sendResult(msg.address, "Local RRC Release triggered");
+        break;
+    }
+    case app::UeCliCommand::SERV_REQ_SIGNALLING: {
+        m_base->nasTask->mm->serviceRequestRequiredForSignalling();
+        sendResult(msg.address, "Service request for signalling triggered.");
+        break;
+    }
+    case app::UeCliCommand::SERV_REQ_DATA: {
+        m_base->nasTask->mm->serviceRequestRequiredForData();
+        sendResult(msg.address, "Service request for data triggered.");
+        break;
+    }
     case app::UeCliCommand::PS_RELEASE: {
         for (int i = 0; i < msg.cmd->psCount; i++)
             m_base->nasTask->sm->sendReleaseRequest(static_cast<int>(msg.cmd->psIds[i]) % 16);

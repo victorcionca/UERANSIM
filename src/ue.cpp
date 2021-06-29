@@ -23,6 +23,8 @@
 #include <utils/options.hpp>
 #include <utils/yaml_utils.hpp>
 #include <yaml-cpp/yaml.h>
+#include <thread>
+#include <chrono>
 
 static app::CliServer *g_cliServer = nullptr;
 static nr::ue::UeConfig *g_refConfig = nullptr;
@@ -36,6 +38,10 @@ static struct Options
     bool disableCmd{};
     std::string imsi{};
     int count{};
+    bool issueRRCRel;
+    bool issueSigSR;
+    bool issueDataSR;
+    bool terminateEarly;
 } g_options{};
 
 struct NwUeControllerCmd : NtsMessage
@@ -250,12 +256,18 @@ static void ReadOptions(int argc, char **argv)
                                       std::nullopt};
     opt::OptionItem itemDisableRouting = {'r', "no-routing-config",
                                           "Do not auto configure routing for UE TUN interface", std::nullopt};
+    opt::OptionItem itemReleaseRRC = {'k', "rel-rrc", "Issue a local RRC release command", std::nullopt};
+    opt::OptionItem itemServReqSig = {'s', "sig-req", "Issue a service request for signalling", std::nullopt};
+    opt::OptionItem itemTerminate = {'t', "terminate", "Terminate experiment early (no endless loop)", std::nullopt};
 
     desc.items.push_back(itemConfigFile);
     desc.items.push_back(itemImsi);
     desc.items.push_back(itemCount);
     desc.items.push_back(itemDisableCmd);
     desc.items.push_back(itemDisableRouting);
+    desc.items.push_back(itemReleaseRRC);
+    desc.items.push_back(itemServReqSig);
+    desc.items.push_back(itemTerminate);
 
     opt::OptionsResult opt{argc, argv, desc, false, nullptr};
 
@@ -282,6 +294,9 @@ static void ReadOptions(int argc, char **argv)
     }
 
     g_options.disableCmd = opt.hasFlag(itemDisableCmd);
+    g_options.issueRRCRel = opt.hasFlag(itemReleaseRRC);
+    g_options.issueSigSR = opt.hasFlag(itemServReqSig);
+    g_options.terminateEarly = opt.hasFlag(itemTerminate);
 }
 
 static std::string LargeSum(std::string a, std::string b)
@@ -474,6 +489,8 @@ int main(int argc, char **argv)
         g_cliRespTask = new app::CliResponseTask(g_cliServer);
     }
 
+    // Start by creating 100 UEs that connect and stay idle without setting up
+    // a PDU session
     for (int i = 0; i < g_options.count; i++)
     {
         auto *config = GetConfigByUe(i);
@@ -489,6 +506,31 @@ int main(int argc, char **argv)
 
     g_ueMap.invokeForeach([](const auto &ue) { ue.second->start(); });
 
-    while (true)
+    // TODO: Once all UEs have registered, issue local RRC Release
+    if (g_options.issueRRCRel){
+        std::cout << "About to issue a local RRC release" << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        // Can we check if they are all registered? We could use the INodeListener
+        auto cmd = std::make_unique<app::UeCliCommand>(app::UeCliCommand::RRC_RELEASE);
+        g_ueMap.invokeForeach([&](const auto &ue) {
+            ue.second->pushCommand(std::move(cmd), g_cliServer->assignedAddress());
+        });
+    }
+
+    if (g_options.issueSigSR){
+        std::cout << "About to issue a signalling service request" << std::endl;
+        std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+        auto cmd = std::make_unique<app::UeCliCommand>(app::UeCliCommand::SERV_REQ_SIGNALLING);
+        g_ueMap.invokeForeach([&](const auto &ue) {
+                ue.second->pushCommand(std::move(cmd), g_cliServer->assignedAddress());
+                });
+
+    }
+
+    // TODO: wait for all UEs to complete their registration
+
+    while (!g_options.terminateEarly)
         Loop();
+
+    // TODO: Do we need to deregister all UEs?
 }
