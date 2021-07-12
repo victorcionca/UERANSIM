@@ -230,6 +230,14 @@ void NasMm::receiveServiceAccept(const nas::ServiceAccept &msg)
         // todo: emergency fallback
     }
 
+    // Notify listeners of service rejection
+    if (m_base->nodeListener){
+        m_base->nodeListener->onServiceRequest(app::NodeType::UE, 
+                                m_base->config->getNodeName(),
+                                app::ServiceRequestResult::ACCEPTED);
+    }
+
+
     // Handle PDU session status
     if (msg.pduSessionStatus.has_value())
     {
@@ -295,6 +303,13 @@ void NasMm::receiveServiceReject(const nas::ServiceReject &msg)
         switchMmState(EMmSubState::MM_REGISTERED_PS);
         m_timers->t3517.stop();
     };
+
+    // Notify listeners of service rejection
+    if (m_base->nodeListener){
+        m_base->nodeListener->onServiceRequest(app::NodeType::UE, 
+                                m_base->config->getNodeName(),
+                                app::ServiceRequestResult::REJECTED);
+    }
 
     // Handle PDU session status
     if (msg.pduSessionStatus.has_value() && msg.sht != nas::ESecurityHeaderType::NOT_PROTECTED)

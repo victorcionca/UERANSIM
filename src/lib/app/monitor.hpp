@@ -39,6 +39,12 @@ enum class StateType
     RRC
 };
 
+enum class ServiceRequestResult
+{
+    ACCEPTED,
+    REJECTED
+};
+
 class INodeListener
 {
   public:
@@ -53,6 +59,9 @@ class INodeListener
 
     virtual void onSwitch(NodeType subjectType, const std::string &subjectId, StateType stateType,
                           const std::string &fromState, const std::string &toState) = 0;
+
+    virtual void onServiceRequest(NodeType subjectType, const std::string &subjectId, 
+            ServiceRequestResult requestResult) = 0;
 };
 
 } // namespace app
