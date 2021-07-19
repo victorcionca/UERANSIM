@@ -9,11 +9,12 @@ build: FORCE
 	# cmake -DCMAKE_BUILD_TYPE=Debug -G "CodeBlocks - Unix Makefiles" . -B cmake-build-debug
 	cmake -DCMAKE_BUILD_TYPE=Release -G "CodeBlocks - Unix Makefiles" . -B cmake-build-release
 	# cmake --build cmake-build-debug --target all
-	cmake --build cmake-build-release --target all
+	cmake --build cmake-build-release --target all -j 4
 	
 	cp cmake-build-release/nr-gnb build/
 	cp cmake-build-release/nr-ue build/
 	cp cmake-build-release/nr-cli build/
+	cp cmake-build-release/cli-remote build/
 	cp cmake-build-release/libdevbnd.so build/
 	cp tools/nr-binder build/
 
