@@ -84,11 +84,13 @@ int main(int argc, char **argv)
 {
     std::ifstream clientFile;
     std::vector<InetAddress> clients;
+    app::CliServer server{};
 
     ReadOptions(argc, argv);
 
     // Read the list of nodes from file
-    if (ReadClients(g_options.clientFile, clients)){
+    if (ReadClients(g_options.clientFile, clients))
+    {
         throw std::runtime_error("Client file could not be opened!");
     }
 
@@ -97,6 +99,18 @@ int main(int argc, char **argv)
         for (InetAddress client : clients){
             std::cout << inet_ntoa(((struct sockaddr_in*)client.getSockAddr())->sin_addr)
                         << ":" << client.getPort() << std::endl;
+        }
+    }
+
+    // Send the command to all the clients
+    for (InetAddress client : clients)
+    {
+        server.sendMessage(app::CliMessage::ServiceRequest(client));
+        app::CliMessage msg = server.receiveMessage();
+        if (msg.type == app::CliMessage::Type::RESULT)
+        {
+            std::cout << inet_ntoa(((struct sockaddr_in*)msg.clientAddr.getSockAddr())->sin_addr)
+                        << ":" << msg.clientAddr.getPort() << "  " << msg.value << std::endl;
         }
     }
 
