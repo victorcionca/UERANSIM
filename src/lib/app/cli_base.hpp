@@ -28,7 +28,8 @@ struct CliMessage
         ECHO,
         ERROR,
         RESULT,
-        COMMAND
+        COMMAND,
+        SERVICE_REQUEST
     } type{};
 
     std::string nodeName{};
@@ -71,6 +72,14 @@ struct CliMessage
         m.type = Type::COMMAND;
         m.value = std::move(msg);
         m.nodeName = std::move(node);
+        m.clientAddr = addr;
+        return m;
+    }
+
+    static CliMessage ServiceRequest(InetAddress addr)
+    {
+        CliMessage m{};
+        m.type = Type::SERVICE_REQUEST;
         m.clientAddr = addr;
         return m;
     }
