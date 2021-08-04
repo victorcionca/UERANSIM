@@ -105,12 +105,15 @@ int main(int argc, char **argv)
     // Send the command to all the clients
     for (InetAddress client : clients)
     {
-        server.sendMessage(app::CliMessage::ServiceRequest(client));
+        std::cout << inet_ntoa(((struct sockaddr_in*)client.getSockAddr())->sin_addr) << " \n";
+        server.sendMessage(app::CliMessage::PDUSessionEstablishment(client));
         app::CliMessage msg = server.receiveMessage();
         if (msg.type == app::CliMessage::Type::RESULT)
         {
             std::cout << inet_ntoa(((struct sockaddr_in*)msg.clientAddr.getSockAddr())->sin_addr)
                         << ":" << msg.clientAddr.getPort() << "  " << msg.value << std::endl;
+        }else{
+            std::cout << "Received " << (int)msg.type << " instead of result\n";
         }
     }
 

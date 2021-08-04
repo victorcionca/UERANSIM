@@ -29,7 +29,8 @@ struct CliMessage
         ERROR,
         RESULT,
         COMMAND,
-        SERVICE_REQUEST
+        SERVICE_REQUEST,
+        PDU_SESSION_ESTABLISHMENT
     } type{};
 
     std::string nodeName{};
@@ -83,6 +84,14 @@ struct CliMessage
         m.clientAddr = addr;
         return m;
     }
+
+    static CliMessage PDUSessionEstablishment(InetAddress addr)
+    {
+        CliMessage m{};
+        m.type = Type::PDU_SESSION_ESTABLISHMENT;
+        m.clientAddr = addr;
+        return m;
+    }
 };
 
 class CliServer
@@ -92,6 +101,11 @@ class CliServer
 
   public:
     explicit CliServer() : m_socket{Socket::CreateAndBindUdp({cons::CMD_SERVER_IP, 0})}
+    {
+    }
+
+    explicit CliServer(uint16_t port) : m_socket{Socket::CreateAndBindUdp({cons::CMD_SERVER_IP,
+                                                                port})}
     {
     }
 
