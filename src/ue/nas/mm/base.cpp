@@ -108,7 +108,8 @@ void NasMm::performMmCycle()
             else if (currentCell.category == ECellCategory::SUITABLE_CELL)
                 switchMmState(EMmSubState::MM_DEREGISTERED_NORMAL_SERVICE);
             else if (currentCell.category == ECellCategory::ACCEPTABLE_CELL)
-                switchMmState(EMmSubState::MM_DEREGISTERED_LIMITED_SERVICE);
+                switchMmState(EMmSubState::MM_DEREGISTERED_NORMAL_SERVICE);
+                //switchMmState(EMmSubState::MM_DEREGISTERED_LIMITED_SERVICE);
             else
                 switchMmState(EMmSubState::MM_DEREGISTERED_PLMN_SEARCH);
         }

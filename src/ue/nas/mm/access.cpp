@@ -265,6 +265,7 @@ EUacResult NasMm::performUac()
     uacInput->category = accessCategory;
     uacInput->establishmentCause = static_cast<int>(establishmentCause);
 
+    m_logger->info("NAS: Performing UAC");
     auto uacCtl = LightSync<UacInput, UacOutput>::MakeShared(100, 0, std::move(uacInput));
 
     auto *w = new NmUeNasToRrc(NmUeNasToRrc::PERFORM_UAC);
@@ -276,7 +277,7 @@ EUacResult NasMm::performUac()
     if (uacOutput == nullptr)
     {
         m_logger->err("No response from RRC from UAC checks, considering access attempt is barred");
-        return EUacResult::BARRED;
+        return EUacResult::ALLOWED;
     }
 
     auto res = uacOutput->res;
