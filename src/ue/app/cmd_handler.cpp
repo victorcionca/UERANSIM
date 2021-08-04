@@ -184,7 +184,7 @@ void UeCmdHandler::handleCmdImpl(NmUeCliCommand &msg)
         break;
     }
     case app::UeCliCommand::SERV_REQ_DATA: {
-        m_base->nasTask->mm->serviceRequestRequiredForData();
+        m_base->nasTask->sm->handleUplinkStatusChange(1, true);
         sendResult(msg.address, "Service request for data triggered.");
         break;
     }
