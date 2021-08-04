@@ -32,6 +32,7 @@ static app::CliServer *g_cliServer = nullptr;
 static nr::ue::UeConfig *g_refConfig = nullptr;
 static ConcurrentMap<std::string, nr::ue::UserEquipment *> g_ueMap{};
 static app::CliResponseTask *g_cliRespTask = nullptr;
+static std::set<int> g_disconnectedUeSet;
 
 struct UETimings
 {
@@ -53,6 +54,8 @@ static struct Options
     bool terminateEarly;
     int srRate{1};
     std::string expPath{};
+    int imsiStart;
+    bool issuePDU;
 } g_options{};
 
 struct NwUeControllerCmd : NtsMessage
@@ -116,6 +119,7 @@ static UeControllerTask *g_controllerTask;
 
 static int g_connectedUes;  // Keep track of how many UEs are in CM-CONNECTED
 static int g_registeredUes;
+static int g_srAnswered = 0; // Keep track of the number of SRs answered
 
 static std::ofstream *stateChanges = new std::ofstream("state_changes.log");
 
@@ -134,6 +138,7 @@ class UeNodeListener : public app::INodeListener
             if (!toState.compare("CM-CONNECTED")){
                 g_connectedUes ++;
                 std::cout << "UE " << subjectId << " now CONNECTED" << g_connectedUes << std::endl;
+                g_disconnectedUeSet.erase(std::stoi(subjectId.substr(17,3)));
             }else if (!toState.compare("CM-IDLE")){
                 g_connectedUes --;
                 std::cout << "UE " << subjectId << " now IDLE" << g_connectedUes << std::endl;
@@ -160,7 +165,73 @@ class UeNodeListener : public app::INodeListener
             *stateChanges << "UE " << std::stoi(subjectId.substr(17, 3)) << " SReq rejected!" << std::endl;
             std::cout << "UE " << std::stoi(subjectId.substr(17, 3)) << " SReq rejected!" << std::endl;
         }
+
+        //g_srAnswered ++;
+        // When all UEs have had their SRs answered, the experiment is over.
+        if (g_srAnswered == g_options.count){
+            std::cout << "Experiment complete\n";
+            // Deregister all UEs
+            std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+            std::cout << "Deregistering UEs\n";
+            g_ueMap.invokeForeach([&](const auto &ue) {
+                    auto cmd = std::make_unique<app::UeCliCommand>(app::UeCliCommand::DE_REGISTER);
+                    cmd->deregCause = EDeregCause::SWITCH_OFF;
+                    ue.second->pushCommand(std::move(cmd), g_cliServer->assignedAddress());
+                    });
+
+            // Commit the experiment results to file
+            char hostname[100];
+            gethostname(hostname, 100);
+            std::string g_hostname{hostname};
+            std::ofstream *exp_results =
+                new std::ofstream(g_options.expPath + "srv_req_exp_"+g_hostname+"_"
+                                                +std::to_string(g_options.srRate));
+
+            for (int i=1;i<=g_options.count;i++){
+                *exp_results << "UE " << i << " times: " << g_ueTimings[g_options.imsiStart+i].startTime.count()
+                    << ", " << g_ueTimings[g_options.imsiStart+i].endTime.count() << std::endl;
+            }
+            exp_results->flush();
+        }
     }
+
+    void onSessionEstablishment(app::NodeType, const std::string &subjectId) override
+    {
+        // Mark the end time for this UE
+        auto reg_end_ts = std::chrono::duration_cast<std::chrono::microseconds>
+            (std::chrono::system_clock::now().time_since_epoch());
+        g_ueTimings[std::stoi(subjectId.substr(17,3))].endTime = reg_end_ts;
+
+        g_srAnswered ++;
+        // When all UEs have had their SRs answered, the experiment is over.
+        if (g_srAnswered == g_options.count){
+            std::cout << "Experiment complete\n";
+            // Deregister all UEs
+            std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+            std::cout << "Deregistering UEs\n";
+            g_ueMap.invokeForeach([&](const auto &ue) {
+                    auto cmd = std::make_unique<app::UeCliCommand>(app::UeCliCommand::DE_REGISTER);
+                    cmd->deregCause = EDeregCause::SWITCH_OFF;
+                    ue.second->pushCommand(std::move(cmd), g_cliServer->assignedAddress());
+                    });
+
+            // Commit the experiment results to file
+            char hostname[100];
+            gethostname(hostname, 100);
+            std::string g_hostname{hostname};
+            std::ofstream *exp_results =
+                new std::ofstream(g_options.expPath + "srv_req_exp_"+g_hostname+"_"
+                                                +std::to_string(g_options.srRate));
+
+            for (int i=1;i<=g_options.count;i++){
+                *exp_results << "UE " << i << " times: " << g_ueTimings[g_options.imsiStart+i].startTime.count()
+                    << ", " << g_ueTimings[g_options.imsiStart+i].endTime.count() << std::endl;
+            }
+            exp_results->flush();
+        }
+
+    }
+
 
     void onConnected(app::NodeType, const std::string &, app::NodeType ,
                              const std::string &) override {}
@@ -332,6 +403,7 @@ static void ReadOptions(int argc, char **argv)
     opt::OptionItem itemTerminate = {'t', "terminate", "Terminate experiment early (no endless loop)", std::nullopt};
     opt::OptionItem itemUeRate = {'a', "rate", "Number of UE ServiceRequest per second", "num"};
     opt::OptionItem itemExpPath = {'p', "exp-path", "Base path for storing experiment results", "exp-path"};
+    opt::OptionItem itemIssuePdu = {'d', "pdu-session", "Establish a PDU session after registering", std::nullopt};
 
     desc.items.push_back(itemConfigFile);
     desc.items.push_back(itemImsi);
@@ -343,6 +415,7 @@ static void ReadOptions(int argc, char **argv)
     desc.items.push_back(itemTerminate);
     desc.items.push_back(itemUeRate);
     desc.items.push_back(itemExpPath);
+    desc.items.push_back(itemIssuePdu);
 
     opt::OptionsResult opt{argc, argv, desc, false, nullptr};
 
@@ -366,6 +439,9 @@ static void ReadOptions(int argc, char **argv)
     {
         g_options.imsi = opt.getOption(itemImsi);
         Supi::Parse("imsi-" + g_options.imsi); // validate the string by parsing
+        g_options.imsiStart = std::stoi(g_options.imsi.substr(12,3))-1;
+    }else{
+        g_options.imsiStart = 0;
     }
 
     if (opt.hasFlag(itemUeRate))
@@ -385,6 +461,7 @@ static void ReadOptions(int argc, char **argv)
 
     g_options.disableCmd = opt.hasFlag(itemDisableCmd);
     g_options.issueRRCRel = opt.hasFlag(itemReleaseRRC);
+    g_options.issuePDU = opt.hasFlag(itemIssuePdu);
     g_options.issueSigSR = opt.hasFlag(itemServReqSig);
     g_options.terminateEarly = opt.hasFlag(itemTerminate);
 }
@@ -456,11 +533,11 @@ static nr::ue::UeConfig *GetConfigByUe(int ueIndex)
     return c;
 }
 
-static void IssueServiceRequests(){
+static void IssuePduEstablishement(){
     int rate = g_options.srRate;
     g_registeredUes = 0;
 
-    std::cout << "About to issue a signalling service request" << std::endl;
+    std::cout << "About to issue a pdu session establishment request" << std::endl;
     std::this_thread::sleep_for(std::chrono::milliseconds(5000));
 
     g_ueMap.invokeForeach([&rate](const auto &ue) {
@@ -468,7 +545,37 @@ static void IssueServiceRequests(){
             auto reg_start_ts = std::chrono::system_clock::now();
             g_ueTimings[std::stoi(ue.first.substr(17,3))].startTime =
             std::chrono::duration_cast<std::chrono::microseconds>(reg_start_ts.time_since_epoch());
-            auto cmd = std::make_unique<app::UeCliCommand>(app::UeCliCommand::SERV_REQ_SIGNALLING);
+            auto cmd = std::make_unique<app::UeCliCommand>(app::UeCliCommand::PS_ESTABLISH);
+            cmd->apn = "internet";
+            cmd->sNssai = SingleSlice{};
+            cmd->sNssai->sst = static_cast<uint8_t>(1);
+            cmd->sNssai->sd = octet3(1);
+            cmd->isEmergency = false;
+            ue.second->pushCommand(std::move(cmd), g_cliServer->assignedAddress());
+            // Introduce a delay for the next node
+            float randNum = ((float)rand())/RAND_MAX-1;
+            int this_lambda = 1000;
+            if (randNum > -1)
+            this_lambda = -(1000*(float)(log1pf(randNum)/((float)rate)));
+            std::cout << "Rand num " << randNum << " Lambda is " << this_lambda << std::endl;
+            std::this_thread::sleep_for(std::chrono::milliseconds(this_lambda));
+            });
+}
+
+
+static void IssueServiceRequests(){
+    int rate = g_options.srRate;
+    g_registeredUes = 0;
+
+    std::cout << "About to issue a data service request" << std::endl;
+    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
+
+    g_ueMap.invokeForeach([&rate](const auto &ue) {
+            // Mark the start time for this UE
+            auto reg_start_ts = std::chrono::system_clock::now();
+            g_ueTimings[std::stoi(ue.first.substr(17,3))].startTime =
+            std::chrono::duration_cast<std::chrono::microseconds>(reg_start_ts.time_since_epoch());
+            auto cmd = std::make_unique<app::UeCliCommand>(app::UeCliCommand::SERV_REQ_DATA);
             ue.second->pushCommand(std::move(cmd), g_cliServer->assignedAddress());
             // Introduce a delay for the next node
             float randNum = ((float)rand())/RAND_MAX-1;
@@ -480,29 +587,10 @@ static void IssueServiceRequests(){
             });
 
     // Wait for all UEs to complete their registration
-    std::cout << "Waiting for all UEs to re-register (MM)\n";
-    while (g_registeredUes < g_options.count){
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
-    }
-
-    // Deregister all UEs
-    std::this_thread::sleep_for(std::chrono::milliseconds(5000));
-    std::cout << "Deregistering UEs\n";
-    g_ueMap.invokeForeach([&](const auto &ue) {
-            auto cmd = std::make_unique<app::UeCliCommand>(app::UeCliCommand::DE_REGISTER);
-            cmd->deregCause = EDeregCause::SWITCH_OFF;
-            ue.second->pushCommand(std::move(cmd), g_cliServer->assignedAddress());
-            });
-
-    // Commit the experiment results to file
-    std::ofstream *exp_results =
-        new std::ofstream(g_options.expPath + "srv_req_exp_"+std::to_string(g_options.srRate));
-
-    for (int i=1;i<=g_options.count;i++){
-        *exp_results << "UE " << i << " times: " << g_ueTimings[i].startTime.count()
-            << ", " << g_ueTimings[i].endTime.count() << std::endl;
-    }
-    exp_results->flush();
+    //std::cout << "Waiting for all UEs to re-register (MM)\n";
+    //while (g_registeredUes < g_options.count){
+    //    std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    //}
 }
 
 
@@ -576,7 +664,15 @@ static void Loop()
     {
         std::cout << "Received ServiceRequest command\n";
         g_cliServer->sendMessage(app::CliMessage::Result(msg.clientAddr, "OK"));
-        //IssueServiceRequests();
+        IssueServiceRequests();
+        return;
+    }
+
+    if (msg.type == app::CliMessage::Type::PDU_SESSION_ESTABLISHMENT)
+    {
+        std::cout << "Received PDU session establishment\n";
+        g_cliServer->sendMessage(app::CliMessage::Result(msg.clientAddr, "OK"));
+        IssuePduEstablishement();
         return;
     }
 
@@ -633,7 +729,7 @@ int main(int argc, char **argv)
 
     if (!g_options.disableCmd)
     {
-        g_cliServer = new app::CliServer{};
+        g_cliServer = new app::CliServer{33333};
         g_cliRespTask = new app::CliResponseTask(g_cliServer);
     }
 
@@ -649,6 +745,7 @@ int main(int argc, char **argv)
         auto *config = GetConfigByUe(i);
         auto *ue = new nr::ue::UserEquipment(config, &g_ueController, g_nodeListener, g_cliRespTask);
         g_ueMap.put(config->getNodeName(), ue);
+        g_disconnectedUeSet.insert(i+1);
     }
 
     if (!g_options.disableCmd)
@@ -657,28 +754,43 @@ int main(int argc, char **argv)
         g_cliRespTask->start();
     }
 
-    g_ueMap.invokeForeach([](const auto &ue) { ue.second->start(); });
+    g_ueMap.invokeForeach([](const auto &ue) {
+            ue.second->start();
+            std::this_thread::sleep_for(std::chrono::milliseconds(50));
+                    });
 
     // Once all UEs have registered, issue local RRC Release
     if (g_options.issueRRCRel){
         std::cout << "Waiting for all UEs to connect\n";
         while (g_connectedUes < g_options.count){
             std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::cout << "Waiting for all UEs to connect. " << g_connectedUes
+                << "/" << g_options.count << ": ";
+            for (int rem_ue : g_disconnectedUeSet)
+                std::cout << rem_ue << ", ";
+            std::cout <<std::endl;
         }
         std::cout << "About to issue a local RRC release" << std::endl;
         std::this_thread::sleep_for(std::chrono::milliseconds(1000));
 
         // Can we check if they are all registered? We could use the INodeListener
         g_ueMap.invokeForeach([&](const auto &ue) {
-            auto cmd = std::make_unique<app::UeCliCommand>(app::UeCliCommand::RRC_RELEASE);
-            ue.second->pushCommand(std::move(cmd), g_cliServer->assignedAddress());
-        });
+                auto cmd = std::make_unique<app::UeCliCommand>(app::UeCliCommand::RRC_RELEASE);
+                ue.second->pushCommand(std::move(cmd), g_cliServer->assignedAddress());
+                });
+
+        std::cout << "Waiting for all UEs to disconnect\n";
+        while (g_connectedUes > 0){
+            std::this_thread::sleep_for(std::chrono::milliseconds(100));
+            std::cout << "Waiting for all UEs to disconnect. " << g_connectedUes
+                << "/" << g_options.count << std::endl;
+        }
     }
 
-
-    std::cout << "Waiting for all UEs to disconnect\n";
-    while (g_connectedUes > 0){
-        std::this_thread::sleep_for(std::chrono::milliseconds(100));
+    // Issue PDU establishment
+    if (g_options.issuePDU)
+    {
+        IssuePduEstablishement();
     }
 
     std::cout << "Listening on " << g_cliServer->assignedAddress().getPort() << std::endl;
