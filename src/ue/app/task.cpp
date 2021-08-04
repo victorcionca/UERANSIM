@@ -121,6 +121,13 @@ void UeAppTask::receiveStatusUpdate(NmUeStatusUpdate &msg)
 {
     if (msg.what == NmUeStatusUpdate::SESSION_ESTABLISHMENT)
     {
+        // Notify listeners of session establishment
+        if (m_base->nodeListener)
+        {
+            m_base->nodeListener->onSessionEstablishment(app::NodeType::UE,
+                    m_base->config->getNodeName());
+        }
+
         auto *session = msg.pduSession;
 
         setupTunInterface(session);

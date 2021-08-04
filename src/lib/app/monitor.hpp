@@ -62,6 +62,8 @@ class INodeListener
 
     virtual void onServiceRequest(NodeType subjectType, const std::string &subjectId, 
             ServiceRequestResult requestResult) = 0;
+
+    virtual void onSessionEstablishment(NodeType subjectType, const std::string &subjectId) = 0;
 };
 
 } // namespace app
