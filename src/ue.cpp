@@ -204,7 +204,7 @@ class UeNodeListener : public app::INodeListener
 
         g_srAnswered ++;
         // When all UEs have had their SRs answered, the experiment is over.
-        if (g_srAnswered == g_options.count){
+        if (g_srAnswered == g_options.count && g_options.terminateEarly){
             std::cout << "Experiment complete\n";
             // Deregister all UEs
             std::this_thread::sleep_for(std::chrono::milliseconds(5000));
