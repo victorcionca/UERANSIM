@@ -71,7 +71,7 @@ class NgapTask : public NtsTask
     /* Utility functions */
     void createAmfContext(const GnbAmfConfig &config);
     NgapAmfContext *findAmfContext(int ctxId);
-    void createUeContext(int ueId);
+    void createUeContext(int ueId, NetworkSlice &ueNssai);
     NgapUeContext *findUeContext(int ctxId);
     NgapUeContext *findUeByRanId(long ranUeNgapId);
     NgapUeContext *findUeByAmfId(long amfUeNgapId);
@@ -98,7 +98,7 @@ class NgapTask : public NtsTask
     bool handleSctpStreamId(int amfId, int stream, const ASN_NGAP_NGAP_PDU &pdu);
 
     /* NAS transport */
-    void handleInitialNasTransport(int ueId, const OctetString &nasPdu, long rrcEstablishmentCause);
+    void handleInitialNasTransport(int ueId, NetworkSlice &ueNssai, const OctetString &nasPdu, long rrcEstablishmentCause);
     void handleUplinkNasTransport(int ueId, const OctetString &nasPdu);
     void receiveDownlinkNasTransport(int amfId, ASN_NGAP_DownlinkNASTransport *msg);
     void deliverDownlinkNas(int ueId, OctetString &&nasPdu);
@@ -117,7 +117,7 @@ class NgapTask : public NtsTask
     void sendContextRelease(int ueId, NgapCause cause);
 
     /* NAS Node Selection */
-    NgapAmfContext *selectAmf(int ueId);
+    NgapAmfContext *selectAmf(int ueId, NetworkSlice &ueNssai);
     NgapAmfContext *selectNewAmfForReAllocation(int ueId, int initiatedAmfId, int amfSetId);
 
     /* Radio resource control */

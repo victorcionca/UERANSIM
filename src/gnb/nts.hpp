@@ -198,6 +198,8 @@ struct NmGnbRrcToNgap : NtsMessage
     // RADIO_LINK_FAILURE
     int ueId{};
 
+    NetworkSlice ueNssai;
+
     // INITIAL_NAS_DELIVERY
     // UPLINK_NAS_DELIVERY
     OctetString pdu{};

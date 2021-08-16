@@ -24,7 +24,7 @@
 namespace nr::gnb
 {
 
-void NgapTask::handleInitialNasTransport(int ueId, const OctetString &nasPdu, long rrcEstablishmentCause)
+void NgapTask::handleInitialNasTransport(int ueId, NetworkSlice &ueNssai, const OctetString &nasPdu, long rrcEstablishmentCause)
 {
     m_logger->debug("Initial NAS message received from UE[%d]", ueId);
 
@@ -34,7 +34,7 @@ void NgapTask::handleInitialNasTransport(int ueId, const OctetString &nasPdu, lo
         return;
     }
 
-    createUeContext(ueId);
+    createUeContext(ueId, ueNssai);
 
     auto *ueCtx = findUeContext(ueId);
     if (ueCtx == nullptr)

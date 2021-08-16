@@ -11,20 +11,26 @@
 namespace nr::gnb
 {
 
-NgapAmfContext *NgapTask::selectAmf(int ueId)
+NgapAmfContext *NgapTask::selectAmf(int ueId, NetworkSlice &ueNssai)
 {
-    NgapAmfContext *retVal = NULL;
     // todo:
+    NgapAmfContext *retVal = NULL;
     for (auto &amf : m_amfCtx){
-        m_logger->debug("AMF %s supports:", amf.second->amfName);
         for (auto &plmn : amf.second->plmnSupportList){
-            m_logger->debug("%s", plmn->plmn);
             for (auto &snssai : plmn->sliceSupportList.slices){
-                m_logger->debug("%d - %d", (uint8_t) snssai.sst, *(snssai.sd));
+                for (auto &ueSNssai : ueNssai.slices){
+                    if (snssai == ueSNssai){
+                        m_logger->debug("Found match on [%d %x] -- [%d %x]",
+                                ueSNssai.sst, ueSNssai.sd.value(),
+                                snssai.sst, snssai.sd.value());
+                        m_logger->debug("AMF address: %s.%d",
+                                amf.second->address.c_str(),
+                                amf.second->port);
+                        retVal = amf.second;
+                    }
+                }
             }
         }
-        if (!retVal)
-            retVal = amf.second; // return the first one
     }
     return retVal;
 }
