@@ -35,6 +35,7 @@
 #include <asn/rrc/ASN_RRC_UL-DCCH-Message.h>
 #include <asn/rrc/ASN_RRC_ULInformationTransfer-IEs.h>
 #include <asn/rrc/ASN_RRC_ULInformationTransfer.h>
+#include <asn/rrc/ASN_RRC_S-NSSAI.h>
 
 namespace nr::gnb
 {
@@ -100,8 +101,22 @@ void GnbRrcTask::receiveRrcSetupComplete(int ueId, const ASN_RRC_RRCSetupComplet
 
     auto setupComplete = msg.criticalExtensions.choice.rrcSetupComplete;
 
+    // TODO check for TMSI
+    NetworkSlice ueNssai{};
+    asn::ForeachItem(*setupComplete->s_NSSAI_List, [&ueNssai](ASN_RRC_S_NSSAI_t &item) {
+            SingleSlice snssai{};
+            OctetString sst_sd = asn::GetOctetString(item.choice.sst_SD);
+            snssai.sst = sst_sd.get(0);
+            snssai.sd = sst_sd.get3(1);
+            ueNssai.addIfNotExists(snssai);
+            });
+    for (SingleSlice &snssai : ueNssai.slices){
+        m_logger->debug("UE slice [SST: %d, SD: %x]", snssai.sst, snssai.sd.value());
+    }
+
     auto *w = new NmGnbRrcToNgap(NmGnbRrcToNgap::INITIAL_NAS_DELIVERY);
     w->ueId = ueId;
+    w->ueNssai = ueNssai;
     w->pdu = asn::GetOctetString(setupComplete->dedicatedNAS_Message);
     w->rrcEstablishmentCause = ue->establishmentCause;
     m_base->ngapTask->push(w);
