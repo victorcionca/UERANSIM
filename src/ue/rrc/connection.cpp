@@ -18,6 +18,7 @@
 #include <asn/rrc/ASN_RRC_RRCSetupComplete.h>
 #include <asn/rrc/ASN_RRC_RRCSetupRequest-IEs.h>
 #include <asn/rrc/ASN_RRC_RRCSetupRequest.h>
+#include <asn/rrc/ASN_RRC_S-NSSAI.h>
 
 namespace nr::ue
 {
@@ -94,6 +95,16 @@ void UeRrcTask::receiveRrcSetup(int cellId, const ASN_RRC_RRCSetup &msg)
     auto &ies = setupComplete->criticalExtensions.choice.rrcSetupComplete = asn::New<ASN_RRC_RRCSetupComplete_IEs>();
     ies->selectedPLMN_Identity = 1;
     asn::SetOctetString(ies->dedicatedNAS_Message, m_initialNasPdu);
+    ies->s_NSSAI_List = asn::New<ASN_RRC_RRCSetupComplete_IEs::ASN_RRC_RRCSetupComplete_IEs__s_NSSAI_List>();
+    for (auto &slice : m_base->config->defaultConfiguredNssai.slices){
+        auto s_nssai = asn::New<ASN_RRC_S_NSSAI_t>();
+        s_nssai->present = ASN_RRC_S_NSSAI_PR_sst_SD;
+        OctetString sNssai_sst_SD{};
+        sNssai_sst_SD.appendOctet(slice.sst);
+        sNssai_sst_SD.appendOctet3(slice.sd.value());
+        asn::SetBitString(s_nssai->choice.sst_SD, sNssai_sst_SD.get4(0));
+        asn::SequenceAdd(*ies->s_NSSAI_List, s_nssai);
+    }
 
     m_initialNasPdu = {};
     sendRrcMessage(pdu);
