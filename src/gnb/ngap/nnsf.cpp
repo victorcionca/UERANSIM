@@ -32,6 +32,10 @@ NgapAmfContext *NgapTask::selectAmf(int ueId, NetworkSlice &ueNssai)
             }
         }
     }
+    if (!retVal){
+        m_logger->debug("Could not find AMF supporting UE sNssai. Using default.");
+        retVal = m_amfCtx.begin()->second;
+    }
     return retVal;
 }
 
